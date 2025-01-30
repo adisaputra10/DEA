@@ -4,9 +4,6 @@ data envelopment Analysis
 
 Fungsi untuk memvisualisasikan benchmarking dan peer comparison.
 
-'''
-
-
  
 
     def plot_benchmarking_peer_comparison(df, input_columns, output_columns)
@@ -56,6 +53,7 @@ Fungsi untuk memvisualisasikan benchmarking dan peer comparison.
         plt.tight_layout()
         plt.show()
 
+Call Function
 
      # Definisi variabel input-output
     input_columns = [
@@ -73,4 +71,4 @@ Fungsi untuk memvisualisasikan benchmarking dan peer comparison.
         'Kecepatan Positif'
     ]
     plot_benchmarking_peer_comparison(df, input_columns, output_columns)
-'''
+
