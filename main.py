@@ -1,149 +1,89 @@
-!pip install pulp pandas
+!pip install pulp
+!pip install pandas
 import pandas as pd
 import pulp
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
 
-
 def run_dea_analysis(input_file, output_file):
-    # 1. Membaca data dari file txt
-    #df = pd.read_csv(input_file, sep='\t')
+    """
+    Function to perform DEA analysis using Constant Returns to Scale (CRS).
+    """
+    # 1. Read data from input file
     df = pd.read_csv(input_file)
-    # 2. Preprocessing data
-    df['Kecepatan Positif'] = 1/df['Output - Kecepatan Eksekusi (detik/request)']
-
-    # 3. Definisi variabel input-output
+    # 2. Data preprocessing
+    df['Execution Speed'] = 1 / df['Execution Speed/second']  # Convert execution speed to a positive metric
+    # 3. Define input-output variables
     input_columns = [
-        'Waktu (hours)',
-        'Tenaga Kerja (man-hours)',
-        'Pelatihan Model (hours)',
+        'Development Time (hours)',
+        'Labor Effort (man-hours)',
+        'Model Training Time (hours)',
         'Data (GB)',
-        'Infrastruktur IT (servers)',
-        'Komputasi (vCPU/core)',
-        'Memori Server (GB)'
+        'IT Infrastructure (servers)',
+        'CPU (cores)',
+        'Memory (GB)'
     ]
-
     output_columns = [
-        'Output - Ketahanan Model (1-10)',
-        'Output - Kinerja Model (%)',
-        'Kecepatan Positif'
+        'Output - Model Robustness (1-10)',
+        'Output - Model Performance (%)',
+        'Execution Speed'
     ]
-
     inputs = df[input_columns].values
     outputs = df[output_columns].values
-
     # 4. DEA Model
     efficiency_scores = []
-
     for dmu in range(len(df)):
-        # Setup model optimisasi
+        # Set up optimization model
         prob = pulp.LpProblem(f"DEA_DMU_{dmu}", pulp.LpMinimize)
         theta = pulp.LpVariable('theta', lowBound=0)
         lambdas = pulp.LpVariable.dicts('lambda', range(len(df)), lowBound=0)
-
-        # Fungsi tujuan
+        # Objective function
         prob += theta
-
-        # Kendala input
+        # Input constraints
         for i in range(inputs.shape[1]):
             prob += pulp.lpSum([lambdas[j] * inputs[j][i] for j in range(len(df))]) <= theta * inputs[dmu][i]
-
-        # Kendala output
+        # Output constraints
         for r in range(outputs.shape[1]):
             prob += pulp.lpSum([lambdas[j] * outputs[j][r] for j in range(len(df))]) >= outputs[dmu][r]
-
-        # Solusi
+        # Solve optimization
         prob.solve(pulp.PULP_CBC_CMD(msg=False))
         efficiency_scores.append(round(pulp.value(theta), 3))
-
-    # 5. Menyimpan hasil
-    df['Efisiensi'] = efficiency_scores
-    result_df = df[['DMU', 'Efisiensi']].sort_values(by='Efisiensi', ascending=False)
+    # 5. Save results
+    df['Efficiency'] = efficiency_scores
+    result_df = df[['DMU', 'Efficiency']].sort_values(by='Efficiency', ascending=False)
     result_df.to_csv(output_file, sep='\t', index=False)
-    print("Hasil Analisa DEA-CRS (Constant  Returns to Scale)")
+    print("DEA-CRS (Constant Returns to Scale) Analysis Results")
     print(result_df)
-
-def plot_benchmarking_peer_comparison(df, input_columns, output_columns):
-    """
-    Fungsi untuk memvisualisasikan benchmarking dan peer comparison.
-    """
-    # Hitung efisiensi menggunakan DEA-VRS
-    inputs = df[input_columns].values
-    outputs = df[output_columns].values
-    
-    # Dictionary untuk menyimpan peer comparison
-    peer_comparison = {}
-    
-    for dmu in range(len(df)):
-        prob = pulp.LpProblem(f"DEA_VRS_DMU_{dmu}", pulp.LpMinimize)
-        theta = pulp.LpVariable('theta', lowBound=0)
-        lambdas = pulp.LpVariable.dicts('lambda', range(len(df)), lowBound=0)
-        
-        # Fungsi tujuan
-        prob += theta
-        
-        # Kendala input
-        for i in range(inputs.shape[1]):
-            prob += pulp.lpSum([lambdas[j] * inputs[j][i] for j in range(len(df))]) <= theta * inputs[dmu][i]
-        
-        # Kendala output
-        for r in range(outputs.shape[1]):
-            prob += pulp.lpSum([lambdas[j] * outputs[j][r] for j in range(len(df))]) >= outputs[dmu][r]
-        
-        # Kendala VRS
-        prob += pulp.lpSum([lambdas[j] for j in range(len(df))]) == 1
-        
-        # Solusi optimasi
-        prob.solve(pulp.PULP_CBC_CMD(msg=False))
-        
-        # Simpan nilai lambda (peer comparison)
-        peer_comparison[df.iloc[dmu]['DMU']] = {
-            df.iloc[j]['DMU']: round(pulp.value(lambdas[j]), 3) for j in range(len(df)) if pulp.value(lambdas[j]) > 0
-        }
-    
-    # Plot benchmarking dan peer comparison
-    plt.figure(figsize=(12, 8))
-    for idx, (dmu, peers) in enumerate(peer_comparison.items()):
-        peers_df = pd.DataFrame(list(peers.items()), columns=['Peer DMU', 'Lambda'])
-        sns.barplot(data=peers_df, x='Peer DMU', y='Lambda', color='skyblue')
-        plt.title(f'Benchmarking & Peer Comparison untuk {dmu}')
-        plt.xlabel('Peer DMU')
-        plt.ylabel('Kontribusi Lambda')
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        plt.show()
-
+    return df
 
 def run_dea_vrs_analysis(input_file, output_file):
     """
-    Fungsi untuk menjalankan analisis DEA-VRS (Variable Returns to Scale).
+    Function to perform DEA analysis using Variable Returns to Scale (VRS).
     """
-    # 1. Membaca data dari file input
+    # 1. Read data from input file
     df = pd.read_csv(input_file)
-    
-    # 2. Preprocessing data
-    df['Kecepatan Positif'] = 1 / df['Output - Kecepatan Eksekusi (detik/request)']
-    
-    # 3. Definisi variabel input-output
+    # 2. Data preprocessing
+    df['Execution Speed'] = 1 / df['Execution Speed/second']  # Convert execution speed to a positive metric
+    print(df['Execution Speed'])
+
+    # 3. Define input-output variables
     input_columns = [
-        'Waktu (hours)',
-        'Tenaga Kerja (man-hours)',
-        'Pelatihan Model (hours)',
+        'Development Time (hours)',
+        'Labor Effort (man-hours)',
+        'Model Training Time (hours)',
         'Data (GB)',
-        'Infrastruktur IT (servers)',
-        'Komputasi (vCPU/core)',
-        'Memori Server (GB)'
+        'IT Infrastructure (servers)',
+        'CPU (cores)',
+        'Memory (GB)'
     ]
     output_columns = [
-        'Output - Ketahanan Model (1-10)',
-        'Output - Kinerja Model (%)',
-        'Kecepatan Positif'
+        'Output - Model Robustness (1-10)',
+        'Output - Model Performance (%)',
+        'Execution Speed'
     ]
-    
     inputs = df[input_columns].values
     outputs = df[output_columns].values
-    
     # 4. DEA-VRS Model
     efficiency_scores = []
     for dmu in range(len(df)):
@@ -158,109 +98,161 @@ def run_dea_vrs_analysis(input_file, output_file):
         prob += pulp.lpSum([lambdas[j] for j in range(len(df))]) == 1
         prob.solve(pulp.PULP_CBC_CMD(msg=False))
         efficiency_scores.append(round(pulp.value(theta), 3))
-    
-    # 5. Menyimpan hasil
-    df['Efisiensi'] = efficiency_scores
-    result_df = df[['DMU', 'Efisiensi']].sort_values(by='Efisiensi', ascending=False)
+    # 5. Save results
+    df['Efficiency'] = efficiency_scores
+    result_df = df[['DMU', 'Efficiency']].sort_values(by='Efficiency', ascending=False)
     result_df.to_csv(output_file, sep='\t', index=False)
-    print("Hasil Analisa DEA-VRS (Variable Returns to Scale)")
+    print("DEA-VRS (Variable Returns to Scale) Analysis Results")
     print(result_df)
     return df
 
-
 def plot_correlation_heatmap(df):
     """
-    Fungsi untuk memvisualisasikan korelasi antara variabel input/output dan efisiensi.
+    Function to visualize the correlation between input/output variables and efficiency.
     """
-    # Hitung korelasi
     correlation_matrix = df.corr(numeric_only=True)
-    
-    # Plot heatmap
     plt.figure(figsize=(12, 8))
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
-    plt.title('Heatmap Korelasi Antar Variabel')
+    plt.title('Heatmap of Variable Correlations')
     plt.show()
-
 
 def plot_regression_analysis(df):
     """
-    Fungsi untuk memvisualisasikan pengaruh variabel terhadap efisiensi menggunakan regresi linear.
+    Function to visualize the influence of variables on efficiency using linear regression.
     """
-    # Variabel independen (input/output) dan dependen (efisiensi)
-    X = df.drop(columns=['DMU', 'Efisiensi'])
-    y = df['Efisiensi']
-    
-    # Regresi linear
+    X = df.drop(columns=['DMU', 'Efficiency'])
+    y = df['Efficiency']
     model = LinearRegression()
     model.fit(X, y)
-    
-    # Koefisien regresi
     coefficients = pd.DataFrame({
-        'Variabel': X.columns,
-        'Koefisien': model.coef_
-    }).sort_values(by='Koefisien', ascending=False)
-    
-    # Plot koefisien regresi
+        'Variable': X.columns,
+        'Coefficient': model.coef_
+    }).sort_values(by='Coefficient', ascending=False)
     plt.figure(figsize=(10, 6))
-    sns.barplot(x='Koefisien', y='Variabel', data=coefficients, palette='viridis')
-    plt.title('Pengaruh Variabel Terhadap Efisiensi (Regresi Linear)')
-    plt.xlabel('Koefisien Regresi')
-    plt.ylabel('Variabel')
+    sns.barplot(x='Coefficient', y='Variable', data=coefficients, palette='viridis')
+    plt.title('Impact of Variables on Efficiency (Linear Regression)')
+    plt.xlabel('Regression Coefficient')
+    plt.ylabel('Variable')
     plt.show()
-
 
 def plot_sensitivity_analysis(df):
     """
-    Fungsi untuk memvisualisasikan sensitivitas variabel terhadap efisiensi.
+    Function to visualize variable sensitivity to efficiency.
     """
-    # Pilih variabel yang paling sensitif
-    sensitivity_vars = ['Output - Kinerja Model (%)', 'Waktu (hours)', 'Pelatihan Model (hours)']
-    sensitivity_df = df[sensitivity_vars + ['Efisiensi']]
-    
-    # Plot scatter plot untuk setiap variabel sensitif
+    sensitivity_vars = ['Development Time (hours)', 'Model Training Time (hours)','IT Infrastructure (servers)','Labor Effort (man-hours)']
+    sensitivity_df = df[sensitivity_vars + ['Efficiency']]
     fig, axes = plt.subplots(1, len(sensitivity_vars), figsize=(18, 5))
     for i, var in enumerate(sensitivity_vars):
-        sns.scatterplot(data=sensitivity_df, x=var, y='Efisiensi', ax=axes[i])
-        axes[i].set_title(f'Sensitivitas {var}')
+        sns.scatterplot(data=sensitivity_df, x=var, y='Efficiency', ax=axes[i])
+        axes[i].set_title(f'Sensitivity Analysis: {var}')
         axes[i].set_xlabel(var)
-        axes[i].set_ylabel('Efisiensi')
+        axes[i].set_ylabel('Efficiency')
+    plt.tight_layout()
+    plt.show()
+
+def plot_slack_analysis(df):
+    """
+    Function to visualize slack (areas needing improvement).
+    """
+    slack_vars = ['Development Time (hours)', 'Labor Effort (man-hours)', 'Model Training Time (hours)']
+    slack_df = df[slack_vars + ['Efficiency']]
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(data=slack_df, orient='h', palette='Set2')
+    plt.title('Slack Analysis: Areas for Improvement')
+    plt.xlabel('Input Value')
+    plt.ylabel('Input Variable')
+    plt.show()
+
+def plot_efficiency_results(df):
+    """
+    Function to visualize DEA-VRS efficiency results using a vertical bar chart with vertical efficiency scores on the left.
+    """
+    # Extract DMU names and efficiency scores
+    dmus = df['DMU']
+    efficiencies = df['Efficiency']
+
+    # Plot vertical bar chart
+    plt.figure(figsize=(12, 8))
+    bars = plt.bar(dmus, efficiencies, color=['green' if eff == 1.0 else 'orange' for eff in efficiencies])
+
+    # Add efficiency values on the left side of the bars (rotated vertically)
+    for bar, efficiency in zip(bars, efficiencies):
+        plt.text(
+            bar.get_x() - 0.1,  # Position text slightly to the left of the bar
+            bar.get_height() / 2 + bar.get_y(),  # Center vertically
+            f'{efficiency:.3f}',
+            va='center',
+            fontsize=10,
+            rotation=90  # Rotate text vertically
+        )
+
+    # Title and labels
+    plt.title("DEA-VRS (Variable Returns to Scale) Analysis Results", fontsize=16)
+    plt.ylabel("Efficiency Score", fontsize=14)
+    plt.xlabel("DMU (Decision Making Unit)", fontsize=14)
+
+    # Rotate DMU names for better readability
+    plt.xticks(rotation=45, ha='right')
+
+    # Add grid
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Show plot
     plt.tight_layout()
     plt.show()
 
 
-def plot_slack_analysis(df):
+def plot_crs_efficiency_results(df):
     """
-    Fungsi untuk memvisualisasikan slack (area yang perlu diperbaiki).
+    Function to visualize DEA-VRS efficiency results using a vertical bar chart with vertical efficiency scores on the left.
     """
-    # Identifikasi slack (misalnya, input yang bisa dikurangi)
-    slack_vars = ['Waktu (hours)', 'Tenaga Kerja (man-hours)', 'Pelatihan Model (hours)']
-    slack_df = df[slack_vars + ['Efisiensi']]
-    
-    # Plot boxplot untuk slack
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(data=slack_df, orient='h', palette='Set2')
-    plt.title('Analisis Slack: Area yang Perlu Diperbaiki')
-    plt.xlabel('Nilai Input')
-    plt.ylabel('Variabel Input')
-    plt.show()
+    # Extract DMU names and efficiency scores
+    dmus = df['DMU']
+    efficiencies = df['Efficiency']
 
+    # Plot vertical bar chart
+    plt.figure(figsize=(12, 8))
+    bars = plt.bar(dmus, efficiencies, color=['green' if eff == 1.0 else 'orange' for eff in efficiencies])
+
+    # Add efficiency values on the left side of the bars (rotated vertically)
+    for bar, efficiency in zip(bars, efficiencies):
+        plt.text(
+            bar.get_x() - 0.1,  # Position text slightly to the left of the bar
+            bar.get_height() / 2 + bar.get_y(),  # Center vertically
+            f'{efficiency:.3f}',
+            va='center',
+            fontsize=10,
+            rotation=90  # Rotate text vertically
+        )
+
+    # Title and labels
+    plt.title("DEA-CRS (Constant Returns to Scale) Analysis Results", fontsize=16)
+    plt.ylabel("Efficiency Score", fontsize=14)
+    plt.xlabel("DMU (Decision Making Unit)", fontsize=14)
+
+    # Rotate DMU names for better readability
+    plt.xticks(rotation=45, ha='right')
+
+    # Add grid
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Show plot
+    plt.tight_layout()
+    plt.show()
 
 # Main execution
 if __name__ == "__main__":
-    # Jalankan analisis DEA-VRS
-    df = run_dea_vrs_analysis('input.csv', 'output-vrs.txt')
-    run_dea_analysis('input.csv', 'output-crs.txt')    
-    # Plot heatmap korelasi
-    plot_correlation_heatmap(df)
-    
-    # Plot regresi linear
-    plot_regression_analysis(df)
-    
-    # Plot sensitivitas
-    plot_sensitivity_analysis(df)
-    
-    # Plot slack
-    plot_slack_analysis(df)
-
-
-
+    # Run DEA-VRS analysis
+    df_vrs = run_dea_vrs_analysis('input.csv', 'output-vrs.txt')
+    # Run DEA-CRS analysis
+    df_crs = run_dea_analysis('input.csv', 'output-crs.txt')
+    # Perform correlation analysis
+    plot_correlation_heatmap(df_vrs)
+    # Perform sensitivity analysis
+    plot_sensitivity_analysis(df_vrs)
+    # Perform slack analysis
+    plot_slack_analysis(df_vrs)
+    # Plot DEA-VRS efficiency results
+    plot_efficiency_results(df_vrs)
+      # Plot DEA-VRS efficiency results
+    plot_crs_efficiency_results(df_crs)
