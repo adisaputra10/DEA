@@ -74,3 +74,17 @@ Call Function
 
 
 ![Logo](dea-crs-vrs.png)
+
+
+![Logo](heatmap.png)
+
+
+![Logo](sensitive-analisis.png)
+
+
+![Logo](slack-analisis.png)
+
+
+![Logo](grafik-dea-crs.png)
+
+![Logo](grafik-dea-vrs.png)
